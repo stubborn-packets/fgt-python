@@ -10,6 +10,7 @@ def find_ssids(netId):
     export_ssids(response)
 
 def export_ssids(ssidList):
+    """Takes in a list of SSIDs and breaks the information down"""
     for ssid in ssidList:
         rprint('[red]*[/red]' * 25)
         rprint(f"SSID Name: {ssid['name']}")
