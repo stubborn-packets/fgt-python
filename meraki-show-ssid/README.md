@@ -1,185 +1,159 @@
-# Using Netmiko with FortiGate
+# List Meraki SSID Info using the Meraki SDK
 
-As a big fan and user of FortiNet’s FortiGate products I have found myself really liking the CLI more than the GUI. Being a Network Engineer the CLI always is the safe place, where magic happens and where a few misspelled words after typing all day will make you want to throw your keyboard. Not saying that the GUI isn’t fantastic or doesn’t have it’s place, it most certainly does especially when review logs and long lines of IPv4 Policies. But for any configuration needs, the CLI is my friend.
+Meraki and Python, goes together like lamb and tuna fish (Big Daddy reference). With Meraki working off a central cloud controller model using Network automation with Meraki just makes sense. You have one central place to query all the data you need and build scripts around, whether that is just showing information and creating a new network. 
 
-One great thing about having a CLI is the ability to script out changes using our favorite network automation tool, Python! This is where our friend Netmiko comes in. This fantasic tool allows for us as Network Engineers to script out our CLI commands so they can be easily repeated on as many devices as needed. Netmiko supports many devices natively but Fortinet is still in experimental support so some things many not work but for most of the scripts I’ve written it has been awesome and I haven’t seen any issues. 
+To make our Network Automation goals achieved easier and to increase adoption they have created the Meraki SDK. This SDK is available to us via PIP and makes doing tasks within Meraki so simple. This is partly due to the fact that the data is returned to us in Python objects so we can quickly and easily do things with the data. No more converting the responses from XML or JSON into Python! This is HUGE! 
 
-If you wish to know more about Netmiko please see Kirk Byers Github page for full documentation and including list of supported platforms
-https://github.com/ktbyers/netmiko
+In this example I’m going to show you how to query the all the SSID’s setup in an network and display some of the data on the console for each SSID. For this I’m going to be using the Read Only Meraki DevNet sandbox which Cisco provides to us for free. Once you see how easy it is to get this data, you can start thinking about way to import it into your environment.
 
-***Full script: show_sys_int.py***
+Below are some links that will be helpful to you if you wish to learn more about the Meraki SDK, DevNet Sandbox and the Meraki API documentation
 
-## Lab and Demo Information
+Meraki Github [https://github.com/meraki](https://github.com/meraki)
 
-In this demo let’s:
-1. Connect to a Fortigate and get the hostname
-2. Create a Loopback interface 
-3. Show the interface configuration to verify. 
-Let’s take a look and see what this looks like in a lab environment using EVE-NG running FortiGate v7.0.9.
+PyPi Meraki [https://pypi.org/project/meraki/#description](https://pypi.org/project/meraki/#description)
 
-*If you’re going to try this in your lab, you can download a FortiGate image from [FortiNet’s Support site](https://support.fortinet.com) with a valid account and  device registration. I unfortunately cannot provide anyone with access to the images.*
+DevNet Sandbox [https://developer.cisco.com/site/sandbox/](https://developer.cisco.com/site/sandbox/)
+
+Meraki API Documentation [https://developer.cisco.com/meraki/api-v1/](https://developer.cisco.com/meraki/api-v1/)
+
+***Full script: meraki-show-ssid.py***
+
+## Lab Overview
+
+In this lab we are going to query all the SSIDs in a given network and display the name, if it’s enabled, if it’s visible, the PSK if there is one and the IP address assignment type. I’m only doing this for a single Network but you could easily pull all the networks attached to an organization and do the same with just a few extra lines of code.
+
+Like I mentioned above, to accomplish this I’m going to use the Read Only account in the Meraki DevNet Sandbox. The login information and API key can be found once you login to the [Cisco Developer website]([https://developer.cisco.com/](https://developer.cisco.com/)) and registration is free. High recommended if you want to learn what you can do with Meraki and Network Automation.
+
+As the login information could change, I’m storing the API key in a separate file called [env.py](http://env.py) and importing that into my working file. All you need to get started is an API key from the DevNet Sandbox or your own Meraki environment. Here is a link to the documentation for obtaining your Meraki API key
+
+[https://developer.cisco.com/meraki/api-v1/#!authorization](https://developer.cisco.com/meraki/api-v1/#!authorization)
 
 ## Preparation
 
-Firstly we need to get our client setup for connecting to our device. For this, I’m using Linux WSL running on a Windows Machine. I have Python 3.10 installed and using a virtual environment to isolate the packages.
-
-Next we need to install Netmiko which can be installed using pip. I am also going to install rich as it making printing items on the terminal look nice and pretty.
+To start working with the Meraki SDK we need to install the module which we can do very easily using PIP.
 ```
-pip install netmiko
-pip install rich
+pip install meraki
 ```
-I have my lab running in EVE-NG and setup a subnet which I can reach locally from my computer, 10.199.199.0/24. A good test is to make sure that you can ping/ssh into the box before coding so you don’t start spinning your head later wondering why something isn’t working when it turns out you had the wrong username/password or the device isn’t routable. 
+That is it. Now let’s jump into the code
 
-Lastly I’m using VScode to write all my code. I’ve been a huge fan of how lightweight it is and how easily it works with Git and GitHub. But you can use any editor of your choosing. 
+## Time spent is time saved (coding)
 
-Once ping/SSH has been confirmed, now we can start with the fun stuff!
-
-
-## print(”Hello World!”)
-
-No we are not really going to print Hello World even though that is generally the first thing you do when learning a new programming language. We are going to start with the basics and get the hostname of the device. 
-
-To start I’m creating a new file (show-sys-int.py) and I’m going to import a few modules
-- getpass - allows for a password to be requested without it displaying the characters as it’s being typed
-- ConnectHandler from netmiko - this is going to handle all the backend connection magic to the FortiGate
-- print from rich - not needed but it does make printing out to the console look nice
+With any modules that someone wrote and made available to us (thank you!) that we use to use in our project, we need to import them.
 ```
-import getpass
-from netmiko import ConnectHandler
+import meraki
 from rich import print as rprint
+from env import API_KEY, NET_ID
 ```
-With the modules imported, we can start writing our first bit of code. We are going to create a dictionary for all the device variables and also ask the user to type in the IP address of the connecting device as well as the user credentials for SSH
+- import meraki - this is the SDK which handles all the backend connection handling so we don’t need to
+- from rich import print as rprint - not needed but does make things look nicer in the console.
+- from env import API_KEY and NET_ID - these are the environment variables which have been provided from the Cisco DevNet Sandbox. The API key is the most important as that is your token to be able to access the sandbox. Without that, you would receive a 401 unauthorized. And the NET_ID is the Network ID that I’m going to query. Since I’m only looking at a single network I only have 1 network ID. However if I was going to be querying multiple networks I could have a list of them and use a for loop to go through each one
+
+Meraki has a few different API which they make available to us. In this example I’m going to be using the Dashboard API. To make our lives easier I’m going to define a variable called DASHBOARD and assigned it to the Meraki Dashboard function and include my API key. This will be used each time that we make a call into the Meraki dashboard.
 ```
-# Define Fortigate Connection Dictionary
-FGT = {
-    "device_type": 'fortinet',
-    "host": "",
-    "username": "",
-    "password": "",
+DASHBOARD = meraki.DashboardAPI(API_KEY)
+```
+To make this code easier to read and increase the reusability of the code, I’m going to break the code up into two functions:
+
+1. query the Meraki Dashboard and get all the SSIDs on that network in put that into a list
+2. take the list object and iterate through it displaying the relevant data for each SSID to the console
+
+Let’s start with the first function, the querying of data.
+```
+def find_ssids(netId):
+    """Used to find all the SSIDs on a particular network"""
+    response = DASHBOARD.wireless.getNetworkWirelessSsids(netId)
+    export_ssids(response)
+```
+I’ve defined a function called find_ssids() which takes in the Network ID of the network we wish to query. 
+
+Next making the call to Meraki using the DASHBOARD function which we created above. Remember this does include the API Key so our request is authorized. Within the DASHBOARD function I’m going to go into the wireless set of functions and finally the getNetworkWirelessSsids function and passing in the Network ID variable. Phew. This might sound like a lot but it is quite easy after you’ve done it a few times. If you want to see what functions are available and what is required for each function you have two options:
+
+1. The Meraki API reference guide [https://developer.cisco.com/meraki/api-v1/#!api-reference-overview](https://developer.cisco.com/meraki/api-v1/#!api-reference-overview)
+2. VScode! As you’re writing the API call VScode context sensitive help will also guide you and let you know what it can return and what is required. 
+
+If you print the response right now you will get back a list object of dictionaries for each SSID. And this is already a Python dictionary, not just JSON data being presented. This is the power of the SDK in Python.
+
+Finally we are going to take that list object and send it over to the export_ssids function which will take that list and break it down SSID by SSID and present the data to us. Each dictionary contains a bunch of information, some of wish we may not need to look at or need. Here is an example of what you would get back without removing anything
+```
+{
+    'number': 14,
+    'name': 'Unconfigured SSID 15',
+    'enabled': False,
+    'splashPage': 'None',
+    'ssidAdminAccessible': False,
+    'authMode': 'open',
+    'radiusAccountingEnabled': None,
+    'ipAssignmentMode': 'NAT mode',
+    'adultContentFilteringEnabled': False,
+    'dnsRewrite': {'enabled': False, 'dnsCustomNameservers': []},
+    'minBitrate': 11,
+    'bandSelection': 'Dual band operation',
+    'perClientBandwidthLimitUp': 0,
+    'perClientBandwidthLimitDown': 0,
+    'perSsidBandwidthLimitUp': 0,
+    'perSsidBandwidthLimitDown': 0,
+    'mandatoryDhcpEnabled': False,
+    'visible': True,
+    'availableOnAllAps': True,
+    'availabilityTags': [],
+    'speedBurst': {'enabled': False}
 }
+```
+I have defined a second function called export_ssids that takes in a variable which I’ve assigned ssidList which is going to be the list we just created. This variable can be named anything you want, my suggestion would be to name is something that is related to the data so when you look back at your code you know what is happening.
 
-# Prompt user for credentials and host information
-FGT["host"] = input("What is the device IP address: ")
-FGT["username"] = input("What is the username: ")
-FGT["password"] = getpass.getpass()
+Now that we have our list in our function, we are going to create a for loop so we can iterate through that list object.
 ```
-Next let’s us connect to the device and let’s get the hostname of it. Something basic that tells us that Netmiko is working as expected and plus we can use the hostname later ;) For this we are going to use a connection manager with Netmiko which will automatically close the session when the code is completed. Very important to always close your connections! 
+def export_ssids(ssidList):
+    """Takes in a list of SSIDs and breaks the information down"""
+    for ssid in ssidList:
+        rprint('[red]*[/red]' * 25)
+        rprint(f"SSID Name: {ssid['name']}")
+        rprint(f"Is Enabled: {ssid['enabled']}")
+        rprint(f"Is visible to users: {ssid['visible']}")
+        if ssid['authMode'] == 'open':
+            rprint(f"Password: OPEN - NO PASSWORD REQUIRED")
+        else:
+            rprint(f"Password: {ssid['psk']}")
+        rprint(f"IP Address Assignment Mode: {ssid['ipAssignmentMode']}")
+```
+I’m using Rich to print out 25 red asterisks so that way I can easy tell in the console where one SSID starts and ends. Just something nice for the console. 
 
-Within the ConnectHandler we are going to unpack the FGT dictionary created above and assign that to the variable conn. This allows us to store that information if we needed to make additional calls to the device we don’t need to unpack and device those variables.
-```
-with ConnectHandler(**FGT) as conn:
-    hostname = conn.find_prompt()[:-1]
-    print(hostname)
-```
-I’m using stripping the last character out of the hostname to remove the ‘#’ that is found when you SSH into the device. Just makes using it later in code cleaner. And we like clean code
+Next I’m printing out specific information from the SSID dictionary and because it’s nested in a for loop we are only looking at one SSID at a time but the code will be repeated for each SSID in the list. And because this is already a dictionary, you can call it just like you would any other dictionary dictionary[’key’] and the value is printed. 
 
-With the above run, you should get something like this:
-```
-(.venv) jbuck:~/fgt-python/fgt-show-interface$ python3 show_sys_int.py 
-What is the device IP address: 10.199.199.100
-What is the username: admin
-Password: 
-LAB-FGT-1
-```
-If that worked, we can go ahead and remove the print(hostname) or comment it out as we know that works. I’ll comment it out so if I ever need to refer to it later or work backwards on an issue it’s still there. I do a lot of print statements in my code projects so I know things are working and then comment out the print statements when I’ve verified it’s working. 
+For the password you need to structure it a little different if you want to display the PSK. If the authmode is open you will not have a key for psk telling you want the password is, because why would you when there is no password. So I created a simple if statement looking if the auth mode was open then I just wrote ‘open - no password required’ however if the auth mode was psk then I looked for the value of the psk key. 
 
+And finally since all the code is in functions they need to be called before they can be executed. To do that I have this little statement below
+```
+if __name__ == "__main__":
+    find_ssids(NET_ID)
+```
+This simply just states that if this specific file is ran then the find_ssids() function can be run using the provided network ID. This makes it so if you want to re-use the function in a different script you’re not worrying about anything running. 
 
-## Show me the goods!
+Now if you run the script you should get some output similar to what I have below. With the SDK you also get a log file each time you run so if you see that in your project don’t be alarmed.
 
-With basic connectivity confirmed and Netmiko working like a champ, let’s now get to the good stuff and create a loopback interface and verify it!
-
-Netmiko supports sending CLI commands in a string format. This can be a single string, list of strings and a list of commands from a text file. For this we’re going to demo sending commands from a list as well as a single string. 
-
-Hopefully if you’re reading this you have some familiarity with the FortiNet CLI syntax. If not, no worries, it’s pretty easy to follow if you know how to do this on other platforms. I’m first going to create a list object with each item being a string containing the commands in sequence I want to run. These are the same commands that you would run if you were SSH’d into the FortiGate.
 ```
-# Commands to send to device
-create_loopback = [
-    'config system interface',
-    'edit Loopback99',
-    'set vdom root',
-    'set type loopback',
-    'set alias Loopback99',
-    'set ip 10.99.99.1/24',
-    'set allowaccess ping',
-    'next',
-    'end',
-]
+*************************
+SSID Name: DevNet Sandbox ALWAYS ON - wirel
+Is Enabled: True
+Is visible to users: True
+Password: OPEN - NO PASSWORD REQUIRED
+IP Address Assignment Mode: NAT mode
+*************************
+SSID Name: TEST
+Is Enabled: True
+Is visible to users: True
+Password: DevNetMegaAPI4ever
+IP Address Assignment Mode: NAT mode
+*************************
+SSID Name: Réseau invité
+Is Enabled: True
+Is visible to users: True
+Password: OPEN - NO PASSWORD REQUIRED
+IP Address Assignment Mode: NAT mode
+*************************
 ```
-If you follow the list we’re creating an interface named ‘Loopback99’, assigning it to the root vdom, setting the type as looback, giving it the IP address of 10.99.99.1/24 and allowing PING. There are so many options that you can configure but these should give us a good starting point.
-
-Next let’s use the power of Netmiko and send these commands to the FortiGate.
-```
-# Create a loopback interface sending the list object and print the SSH output
-rprint(f'Running commands on: [green]{hostname}[/green]')
-output = conn.send_config_set(create_loopback)
-rprint('[red]*[/red]' * 5 + 'CONFIG OUTPUT' + '[red]*[/red]' * 5)
-rprint(output)
-```
-To start I’m using Rich to add some color to console output, because just looking at white text on a black console isn’t fun. I’m doing a simple print statement to say that the commands are running and specifying the hostname variable we created earlier. I like to do this so if you are connecting to multiple devices you know where you’re at. For a single device, it just looks nice. 
-
-Next we are going to use the ConnectHandler object conn that we created earlier and also using the send_config_set() function to define our list object. I’m assigning this to a variable named output which I can use to print later.
-
-If you run the code right now, you should see Netmiko running the CLI commands just like if you were SSH’d into the FortiGate.
-```
-(.venv) jbuck:~/fgt-python/fgt-show-interface$ python3 show_sys_int.py 
-What is the device IP address: 10.199.199.100
-What is the username: admin
-Password: 
-Running commands on: LAB-FGT-1 
-*****CONFIG OUTPUT*****
-config system interface
-LAB-FGT-1 (interface) # edit Loopback99
-new entry 'Loopback99' added
-LAB-FGT-1 (Loopback99) # set vdom root
-LAB-FGT-1 (Loopback99) # set type loopback
-LAB-FGT-1 (Loopback99) # set alias Loopback99
-LAB-FGT-1 (Loopback99) # set ip 10.99.99.1/24
-LAB-FGT-1 (Loopback99) # set allowaccess ping
-LAB-FGT-1 (Loopback99) # next
-LAB-FGT-1 (interface) # end
-LAB-FGT-1 #
-```
-Now let’s finish it up and verify that the newly created Loopback is setup correctly. Again we are going to use the ConnectHandler object conn but use the send_command() function as we are going to send one command. This function only takes one string object. I’m going to send ‘show system interface Loopback99’ and print that out as well. 
-```
-# Verify that the interface has been added and print the results
-verify_output = conn.send_command('show system interface Loopback99')
-rprint('[red]*[/red]' * 5 + 'VERIFY CONFIG' + '[red]*[/red]' * 5)
-print(verify_output)
-```
-Now if you run the full script your output should look like mine below:
-```
-(.venv) jbuck:~/fgt-python/fgt-show-interface$ python3 show_sys_int.py 
-What is the device IP address: 10.199.199.100
-What is the username: admin
-Password: 
-Running commands on: LAB-FGT-1 
-*****CONFIG OUTPUT*****
-config system interface
-LAB-FGT-1 (interface) # edit Loopback99
-new entry 'Loopback99' added
-LAB-FGT-1 (Loopback99) # set vdom root
-LAB-FGT-1 (Loopback99) # set type loopback
-LAB-FGT-1 (Loopback99) # set alias Loopback99
-LAB-FGT-1 (Loopback99) # set ip 10.99.99.1/24
-LAB-FGT-1 (Loopback99) # set allowaccess ping
-LAB-FGT-1 (Loopback99) # next
-LAB-FGT-1 (interface) # end
-LAB-FGT-1 # 
-*****VERIFY CONFIG*****
-config system interface
-    edit "Loopback99"
-        set vdom "root"
-        set ip 10.99.99.1 255.255.255.0
-        set allowaccess ping
-        set type loopback
-        set alias "Loopback99"
-        set snmp-index 8
-    next
-end
-```
+Congrats!
 
 ## Final Thoughts
 
-That was fun! Netmiko makes sending command(s) to devices really easy and fast. You can see the power of this if you needed to make a change to 5, 10, 100 device were you can create a script and have it do all the work for you. Spend a few minutes writing the script and save hours. Well worth learning!
-
-To see the full script: show_sys_int.py
+The Meraki SDK is a blast to work with. This tool really makes it easy to script out and get the data back all using Python. No more converting from one data format into another, this keeps it all within Python and makes the code easy and clean.
