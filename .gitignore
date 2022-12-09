@@ -6,3 +6,5 @@ venv/
 # ignore pychache files from vscode
 __pycache__
 _pycache_
+# ignore environment variables
+env.py
