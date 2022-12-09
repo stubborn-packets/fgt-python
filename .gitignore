@@ -1,0 +1,8 @@
+# ignore Python Virtual Env
+venv/
+.venv/
+# ignore VS Code Stuff
+.vscode/
+# ignore pychache files from vscode
+__pycache__
+_pycache_
