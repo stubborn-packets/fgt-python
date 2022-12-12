@@ -35,10 +35,10 @@ Next let's create our base CSV file that we are going to be exporting the data t
 touch ssid-export.csv
 ```
 Let's open that .csv file in VScode and write out the fields that we are going to be exporting
-'''
+```
 ORG_ID,NETWORK_ID,SSID,PASSWORD,ENABLED,IP_ASSIGNMENT,VISABLE
 
-'''
+```
 I am leaving a blank line so when we start writing the data it starts on line two instead of continuing on the first line. 
 
 Let's moving into the code
