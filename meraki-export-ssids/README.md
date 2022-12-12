@@ -7,8 +7,11 @@ This can be very useful if you're working on building out a Meraki solution for 
 Below are some links that will be helpful to you if you wish to learn more about the Meraki SDK, DevNet Sandbox and the Meraki API documentation
 
 Meraki Github [https://github.com/meraki](https://github.com/meraki)
+
 PyPi Meraki [https://pypi.org/project/meraki/#description](https://pypi.org/project/meraki/#description)
+
 DevNet Sandbox [https://developer.cisco.com/site/sandbox/](https://developer.cisco.com/site/sandbox/)
+
 Meraki API Documentation [https://developer.cisco.com/meraki/api-v1/](https://developer.cisco.com/meraki/api-v1/)
 
 ***Full script: meraki-export-ssids.py***
